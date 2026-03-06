@@ -1,0 +1,5 @@
+token.json
+client_secret.json
+__pycache__/
+*.png
+temp_*.pdf
