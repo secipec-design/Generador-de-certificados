@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 import qrcode
-from google.oauth2.credentials import Credentials
+from google.oauth2 import service_account # <-- CAMBIO AQUI
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 from reportlab.pdfgen import canvas
@@ -11,46 +11,22 @@ from reportlab.pdfbase.ttfonts import TTFont
 from PyPDF2 import PdfReader, PdfWriter
 
 # 1. CONFIGURACIÓN DE LA PÁGINA Y COLORES
-st.set_page_config(page_title="Generador de Certificados", page_icon="🎓", layout="centered")
+st.set_page_config(page_title="SECIP - Generador de Certificados", page_icon="🎓", layout="centered")
 
-# Inyectamos CSS personalizado para el Azul Marino (#000080) y Blanco
 st.markdown("""
     <style>
-    /* Fondo general de la aplicación */
     .stApp { background-color: #ffffff; }
-    
-    /* Textos generales en azul marino */
     h1, h2, h3, p, label { color: #000080 !important; }
-    
-    /* --- CONFIGURACIÓN DEL BOTÓN --- */
     .stButton > button {
-        background-color: #000080 !important; /* Azul marino */
-        border-radius: 8px; 
-        border: none; 
-        width: 100%; 
-        padding: 5px;
+        background-color: #000080 !important; 
+        border-radius: 8px; border: none; width: 100%; padding: 5px;
     }
-    /* Forzamos que cualquier elemento dentro del botón sea BLANCO y NEGRITA */
-    .stButton > button, 
-    .stButton > button * p, 
-    .stButton > button div, 
-    .stButton > button span {
-        color: #ffffff !important;
-        font-weight: bold !important;
+    .stButton > button, .stButton > button * p, .stButton > button div, .stButton > button span {
+        color: #ffffff !important; font-weight: bold !important;
     }
-    /* Color al pasar el mouse por encima */
     .stButton > button:hover { background-color: #0000cd !important; }
-    
-    /* --- CONFIGURACIÓN DE LAS NOTIFICACIONES (TOASTS) --- */
-    div[data-testid="stToast"] {
-        background-color: #000080 !important; /* Fondo azul marino */
-        border: 1px solid #ffffff !important; /* Pequeño borde blanco para que resalte */
-    }
-    /* Forzamos que el texto de la notificación sea BLANCO y NEGRITA */
-    div[data-testid="stToast"] * {
-        color: #ffffff !important;
-        font-weight: bold !important;
-    }
+    div[data-testid="stToast"] { background-color: #000080 !important; border: 1px solid #ffffff !important; }
+    div[data-testid="stToast"] * { color: #ffffff !important; font-weight: bold !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -68,30 +44,31 @@ if archivo_subido is not None:
     
     if st.button("Generar y Enviar Certificados"):
         with st.spinner("Conectando con Google Drive y generando certificados..."):
-            
             try:
                 # =======================================================
-                # 1. AUTENTICACIÓN FLEXIBLE (Local vs Nube)
+                # 1. AUTENTICACIÓN CON CUENTA DE SERVICIO
                 # =======================================================
                 SCOPES = ['https://www.googleapis.com/auth/drive']
                 
                 # Si estamos en Streamlit Cloud, leemos de los secretos
-                if "google_token" in st.secrets:
-                    token_info = dict(st.secrets["google_token"])
-                    creds = Credentials.from_authorized_user_info(token_info, SCOPES)
-                # Si estamos en tu laptop, leemos el archivo local
+                if "gcp_service_account" in st.secrets:
+                    creds_info = dict(st.secrets["gcp_service_account"])
+                    creds = service_account.Credentials.from_service_account_info(creds_info, scopes=SCOPES)
+                # Si estamos en local, leemos el archivo JSON descargado
                 else:
-                    creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+                    creds = service_account.Credentials.from_service_account_file('credentials.json', scopes=SCOPES)
                 
                 drive_service = build('drive', 'v3', credentials=creds)
                 
                 # =======================================================
-                # 2. CONFIGURACIÓN INICIAL LOCAL
+                # 2. CONFIGURACIÓN DE RUTAS RELATIVAS
                 # =======================================================
                 ID_CARPETA_DESTINO = "1_85lcSovQ6UDikiljKUzSG_N4PulQZlI"       
-                # Ahora la plantilla debe estar en la misma carpeta que este script
-                RUTA_PLANTILLA_PDF = "C:\\Users\\ferna\\Desktop\\Certificados_pediatra\\plantilla_SECIP.pdf" 
                 
+                # CAMBIO: Usar rutas relativas. Los archivos deben estar junto a este script.
+                RUTA_PLANTILLA_PDF = "plantilla_SECIP.pdf" 
+                
+                # CAMBIO: Asegúrate de tener este archivo .ttf en la misma carpeta del proyecto
                 pdfmetrics.registerFont(TTFont('IBMPlexCondensed', 'IBMPlexSansCondensed-Bold.ttf'))
 
                 COORD_NOMBRE = (75, 640)  
@@ -103,7 +80,6 @@ if archivo_subido is not None:
                 # =======================================================
                 # 3. BUCLE SOBRE EL DATAFRAME DEL EXCEL
                 # =======================================================
-                # Iteramos directamente sobre las filas del Excel que subió el usuario
                 for index, fila in df.iterrows():
                     nombre = str(fila.get('nombre', ''))
                     fecha_comp = str(fila.get('fecha_completado', ''))[:10]
@@ -112,7 +88,6 @@ if archivo_subido is not None:
                     if not nombre or nombre == 'nan':
                         continue
 
-                    # Mostramos el progreso en la interfaz de Streamlit
                     st.toast(f"Procesando certificado de: {nombre}...")
 
                     # PASO A: Crear archivo vacío en Drive
@@ -128,17 +103,14 @@ if archivo_subido is not None:
                     permission = {'type': 'anyone', 'role': 'reader'}
                     drive_service.permissions().create(fileId=file_id, body=permission).execute()
 
-                    # PASO B: Generar QR
-                    # Generamos nombres genéricos y seguros para evitar errores en Windows
+                    # PASO B: Generar QR y Capas
                     qr_path = "temp_qr.png"
                     capa_path = "temp_capa.pdf"
                     pdf_final_path = "temp_final.pdf"
 
-                    # PASO B: Generar QR
                     qr = qrcode.make(web_link)
                     qr.save(qr_path)
 
-                    # PASO C: Crear capa ReportLab
                     c = canvas.Canvas(capa_path)
                     c.setFont("IBMPlexCondensed", 10)
                     c.drawString(COORD_NOMBRE[0], COORD_NOMBRE[1], nombre)
