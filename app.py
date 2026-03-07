@@ -31,7 +31,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # 2. INTERFAZ DE USUARIO
-st.title("Sistema de Generación de Certificados")
+st.title("SECIP - Sistema de Generación de Certificados")
 st.write("Sube el archivo de Excel con los datos de los participantes.")
 
 archivo_subido = st.file_uploader("Cargar archivo Excel (.xlsx)", type=["xlsx", "xls"])
@@ -145,3 +145,4 @@ if archivo_subido is not None:
                 
             except Exception as e:
                 st.error(f"Hubo un error en el proceso: {e}")
+
