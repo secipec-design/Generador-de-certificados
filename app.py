@@ -2,7 +2,8 @@ import streamlit as st
 import pandas as pd
 import os
 import qrcode
-from google.oauth2 import service_account # <-- CAMBIO AQUI
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request # <-- Nueva importación vital
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 from reportlab.pdfgen import canvas
@@ -13,30 +14,13 @@ from PyPDF2 import PdfReader, PdfWriter
 # 1. CONFIGURACIÓN DE LA PÁGINA Y COLORES
 st.set_page_config(page_title="SECIP - Generador de Certificados", page_icon="🎓", layout="centered")
 
-st.markdown("""
-    <style>
-    .stApp { background-color: #ffffff; }
-    h1, h2, h3, p, label { color: #000080 !important; }
-    .stButton > button {
-        background-color: #000080 !important; 
-        border-radius: 8px; border: none; width: 100%; padding: 5px;
-    }
-    .stButton > button, .stButton > button * p, .stButton > button div, .stButton > button span {
-        color: #ffffff !important; font-weight: bold !important;
-    }
-    .stButton > button:hover { background-color: #0000cd !important; }
-    div[data-testid="stToast"] { background-color: #000080 !important; border: 1px solid #ffffff !important; }
-    div[data-testid="stToast"] * { color: #ffffff !important; font-weight: bold !important; }
-    </style>
-    """, unsafe_allow_html=True)
+# ... (Mantén toda tu configuración de CSS de st.markdown igual que antes) ...
 
-# 2. INTERFAZ DE USUARIO
-st.title("SECIP - Sistema de Generación de Certificados")
+st.title("Sistema de Generación de Certificados")
 st.write("Sube el archivo de Excel con los datos de los participantes.")
 
 archivo_subido = st.file_uploader("Cargar archivo Excel (.xlsx)", type=["xlsx", "xls"])
 
-# 3. LÓGICA DE EJECUCIÓN
 if archivo_subido is not None:
     df = pd.read_excel(archivo_subido)
     st.write("Vista previa de los datos:")
@@ -46,36 +30,45 @@ if archivo_subido is not None:
         with st.spinner("Conectando con Google Drive y generando certificados..."):
             try:
                 # =======================================================
-                # 1. AUTENTICACIÓN CON CUENTA DE SERVICIO
+                # 1. AUTENTICACIÓN OAUTH CON RENOVACIÓN AUTOMÁTICA
                 # =======================================================
                 SCOPES = ['https://www.googleapis.com/auth/drive']
+                creds = None
                 
-                # Si estamos en Streamlit Cloud, leemos de los secretos
-                if "gcp_service_account" in st.secrets:
-                    creds_info = dict(st.secrets["gcp_service_account"])
-                    creds = service_account.Credentials.from_service_account_info(creds_info, scopes=SCOPES)
-                # Si estamos en local, leemos el archivo JSON descargado
+                # A. Leemos las credenciales (de Streamlit Secrets o del archivo local)
+                if "google_token" in st.secrets:
+                    token_info = dict(st.secrets["google_token"])
+                    creds = Credentials.from_authorized_user_info(token_info, SCOPES)
+                elif os.path.exists('token.json'):
+                    creds = Credentials.from_authorized_user_file('token.json', SCOPES)
                 else:
-                    creds = service_account.Credentials.from_service_account_file('credentials.json', scopes=SCOPES)
+                    st.error("No se encontraron credenciales de autenticación.")
+                    st.stop()
                 
+                # B. Si el token expiró, lo renovamos automáticamente
+                if creds and creds.expired and creds.refresh_token:
+                    creds.refresh(Request())
+                    # Si estamos en la computadora, guardamos el nuevo token actualizado
+                    if "google_token" not in st.secrets:
+                        with open('token.json', 'w') as token_file:
+                            token_file.write(creds.to_json())
+
                 drive_service = build('drive', 'v3', credentials=creds)
                 
                 # =======================================================
-                # 2. CONFIGURACIÓN DE RUTAS RELATIVAS
+                # 2. CONFIGURACIÓN DE RUTAS Y CARPETAS
                 # =======================================================
-                ID_CARPETA_DESTINO = "1yjpuZSUx-9B765CQrDkmlYS_kYfYNWIO"       
-                
-                # CAMBIO: Usar rutas relativas. Los archivos deben estar junto a este script.
+                # Asegúrate de que esta sea la ID correcta de tu carpeta
+                ID_CARPETA_DESTINO = "1_85lcSovQ6UDikiljKUzSG_N4PulQZlI"       
                 RUTA_PLANTILLA_PDF = "plantilla_SECIP.pdf" 
                 
-                # CAMBIO: Asegúrate de tener este archivo .ttf en la misma carpeta del proyecto
                 pdfmetrics.registerFont(TTFont('IBMPlexCondensed', 'IBMPlexSansCondensed-Bold.ttf'))
 
                 COORD_NOMBRE = (75, 640)  
                 COORD_FECHA_COMP = (135, 625) 
                 COORD_FECHA_EXP = (125, 619)  
                 COORD_QR = (465, 600)         
-                TAMANO_QR = 50               
+                TAMANO_QR = 50                             
 
                 # =======================================================
                 # 3. BUCLE SOBRE EL DATAFRAME DEL EXCEL
@@ -145,5 +138,6 @@ if archivo_subido is not None:
                 
             except Exception as e:
                 st.error(f"Hubo un error en el proceso: {e}")
+
 
 
