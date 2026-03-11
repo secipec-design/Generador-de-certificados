@@ -16,8 +16,9 @@ st.set_page_config(page_title="SECIP - Generador de Certificados", page_icon="�
 
 # ... (Mantén toda tu configuración de CSS de st.markdown igual que antes) ...
 
-st.title("Sistema de Generación de Certificados")
+st.title("SECIP - Sistema de Generación de Certificados")
 st.write("Sube el archivo de Excel con los datos de los participantes.")
+st.write("El archivo debe tener las columnas: nombre ; fecha_completado ; fecha_expiracion")
 
 archivo_subido = st.file_uploader("Cargar archivo Excel (.xlsx)", type=["xlsx", "xls"])
 
@@ -26,7 +27,7 @@ if archivo_subido is not None:
     st.write("Vista previa de los datos:")
     st.dataframe(df.head())
     
-    if st.button("Generar y Enviar Certificados"):
+    if st.button("Generar Certificados"):
         with st.spinner("Conectando con Google Drive y generando certificados..."):
             try:
                 # =======================================================
@@ -138,6 +139,7 @@ if archivo_subido is not None:
                 
             except Exception as e:
                 st.error(f"Hubo un error en el proceso: {e}")
+
 
 
 
