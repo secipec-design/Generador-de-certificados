@@ -59,7 +59,7 @@ if archivo_subido is not None:
                 # 2. CONFIGURACIÓN DE RUTAS Y CARPETAS
                 # =======================================================
                 # Asegúrate de que esta sea la ID correcta de tu carpeta
-                ID_CARPETA_DESTINO = "1_85lcSovQ6UDikiljKUzSG_N4PulQZlI"       
+                ID_CARPETA_DESTINO = "13uo8a_rW69zneVCh86adWy2cRCvmYmdO"       
                 RUTA_PLANTILLA_PDF = "plantilla_SECIP.pdf" 
                 
                 pdfmetrics.registerFont(TTFont('IBMPlexCondensed', 'IBMPlexSansCondensed-Bold.ttf'))
@@ -138,6 +138,7 @@ if archivo_subido is not None:
                 
             except Exception as e:
                 st.error(f"Hubo un error en el proceso: {e}")
+
 
 
 
